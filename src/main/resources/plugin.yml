@@ -8,5 +8,5 @@ commands:
       - headgetter
     permission: "skull.get"
     test:
-    - name: texture
-      abc: ""
+      - name: texture
+        abc: ""

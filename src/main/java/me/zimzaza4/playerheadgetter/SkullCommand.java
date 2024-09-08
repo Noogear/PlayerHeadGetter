@@ -1,54 +1,65 @@
 package me.zimzaza4.playerheadgetter;
 
-import de.tr7zw.changeme.nbtapi.NBTCompound;
-import de.tr7zw.changeme.nbtapi.NBTContainer;
-import de.tr7zw.changeme.nbtapi.NBTItem;
-import me.zimzaza4.playerheadgetter.slimefun.SlimefunGetter;
-import org.bukkit.Bukkit;
+import de.tr7zw.changeme.nbtapi.NBT;
+import de.tr7zw.changeme.nbtapi.iface.ReadWriteNBT;
+import de.tr7zw.changeme.nbtapi.iface.ReadableNBT;
+import de.tr7zw.changeme.nbtapi.iface.ReadableNBTList;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class SkullCommand implements CommandExecutor {
     public static final Set<String> textures = new HashSet<>();
     public static final Set<Player> users = new HashSet<>();
+
+    public static String getTexture(ItemStack item) {
+        return NBT.modifyComponents(item, nbt -> {
+            ReadableNBT skullOwnerCompound = nbt.getCompound("minecraft:profile");
+            if (skullOwnerCompound == null) {
+                return null;
+            }
+            ReadableNBTList<ReadWriteNBT> skullOwnerPropertiesCompound = skullOwnerCompound.getCompoundList("properties");
+            for (ReadWriteNBT property : skullOwnerPropertiesCompound) {
+                if (Objects.equals(property.getString("name"), "textures") && property.getString("value") != null) {
+                    return property.getString("value");
+                }
+            }
+            return null;
+        });
+    }
+
+    @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (sender.hasPermission("skull.get")) {
             if (!(sender instanceof Player)) {
                 return false;
             }
             switch (args[0]) {
-                case "slimefun":
-                    if (Bukkit.getPluginManager().getPlugin("Slimefun") != null) {
-                        SlimefunGetter.getSkull(textures, (Player) sender);
-                    }
-                    break;
-
                 case "hand":
                     if (((Player) sender).getInventory().getItemInMainHand().getItemMeta() instanceof SkullMeta) {
                         ItemStack item = ((Player) sender).getInventory().getItemInMainHand();
-
-                        NBTContainer nbt = NBTItem.convertItemtoNBT(item);
-                        if (nbt.getCompound("tag").hasTag("SkullOwner") && nbt.getCompound("tag").getCompound("SkullOwner").hasTag("Properties")) {
-                            NBTCompound p = nbt.getCompound("tag").getCompound("SkullOwner").getCompound("Properties");
-
-                            p.getCompoundList("textures").forEach(texture -> {
-                                textures.add(texture.getString("Value"));
-                            });
+                        String texture = getTexture(item);
+                        if (texture != null) {
+                            textures.add(texture);
+                        }
+                    }
+                    break;
+                case "test":
+                    if (((Player) sender).getInventory().getItemInMainHand().getItemMeta() instanceof SkullMeta) {
+                        ItemStack item = ((Player) sender).getInventory().getItemInMainHand();
+                        String texture = getTexture(item);
+                        if (texture != null) {
+                            sender.sendMessage(texture);
                         }
                     }
                     break;
@@ -64,12 +75,15 @@ public class SkullCommand implements CommandExecutor {
                                 } catch (IOException ioException) {
                                     ioException.printStackTrace();
                                 }
+                            } else {
+                                textures.addAll(YamlConfiguration.loadConfiguration(f).getStringList("textures"));
                             }
                             FileConfiguration cfg = new YamlConfiguration();
                             List<String> strings = new ArrayList<>(textures);
                             cfg.set("textures", strings);
                             try {
                                 cfg.save(f);
+                                sender.sendMessage("已保存");
                             } catch (IOException ioException) {
                                 ioException.printStackTrace();
                             }
@@ -93,26 +107,23 @@ public class SkullCommand implements CommandExecutor {
                                 if (!player.isOnline()) {
                                     this.cancel();
                                 }
-
-
                                 for (ItemStack item : player.getOpenInventory().getTopInventory()) {
-
-                                    NBTContainer nbt = NBTItem.convertItemtoNBT(item);
-                                    if (nbt.hasTag("tag") && nbt.getCompound("tag").hasTag("SkullOwner") && nbt.getCompound("tag").getCompound("SkullOwner").hasTag("Properties")) {
-                                        NBTCompound p = nbt.getCompound("tag").getCompound("SkullOwner").getCompound("Properties");
-
-                                        p.getCompoundList("textures").forEach(texture -> textures.add(texture.getString("Value")));
+                                    if (item != null) {
+                                        if (item.getItemMeta() instanceof SkullMeta) {
+                                            String texture = getTexture(item);
+                                            if (texture != null) {
+                                                textures.add(texture);
+                                                sender.sendMessage(texture);
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }.runTaskTimer(PlayerHeadGetter.plugin, 10, 10);
-
                     }
-
                     break;
             }
         }
         return true;
-
     }
 }
